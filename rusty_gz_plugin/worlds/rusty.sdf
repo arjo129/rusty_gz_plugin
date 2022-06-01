@@ -1,0 +1,8 @@
+<sdf version="1.6">
+  <world name="waterworld">
+    <plugin
+      filename="libRustySystem.so"
+      name="rusty::RustySystem">
+    </plugin>
+  </world>
+</sdf>
