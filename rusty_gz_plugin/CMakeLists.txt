@@ -4,22 +4,31 @@ project(rusty_system)
 
 find_package(ament_cmake REQUIRED)
 
-find_package(ignition-gazebo6 REQUIRED)
-set(IGN_GAZEBO_VER ${ignition-gazebo6_VERSION_MAJOR})
+find_package(gz-cmake3 REQUIRED)
+find_package(gz-sim7 REQUIRED COMPONENTS gui)
+set(GZ_SIM_VER ${gz-sim7_VERSION_MAJOR})
 
-find_package(ignition-common4 REQUIRED COMPONENTS graphics)
-set(IGN_COMMON_VER ${ignition-common4_VERSION_MAJOR})
-find_package(ignition-fuel_tools7 REQUIRED)
-find_package(ignition-math6 REQUIRED)
-set(IGN_MATH_VER ${ignition-math6_VERSION_MAJOR})
-find_package(ignition-msgs8 REQUIRED)
-find_package(ignition-transport11 REQUIRED)
-set(IGN_TRANSPORT_VER ${ignition-transport11_VERSION_MAJOR})
-find_package(ignition-plugin1 REQUIRED COMPONENTS loader register)
-set(IGN_PLUGIN_VER ${ignition-plugin1_VERSION_MAJOR})
-find_package(ignition-rendering6 REQUIRED)
-set(IGN_RENDERING_VER ${ignition-rendering6_VERSION_MAJOR})
-find_package(sdformat12 REQUIRED)
+find_package(gz-gui7 REQUIRED)
+set(GZ_GUI_VER ${gz-gui7_VERSION_MAJOR})
+
+find_package(gz-rendering7 REQUIRED)
+set(GZ_RENDERING_VER ${gz-rendering7_VERSION_MAJOR})
+
+find_package(gz-sensors7 REQUIRED)
+set(GZ_SENSORS_VER ${gz-sensors7_VERSION_MAJOR})
+set(GZ_SENSORS gz-sensors${GZ_SENSORS_VER}::gz-sensors${GZ_SENSORS_VER})
+
+find_package(gz-msgs9 REQUIRED)
+set(GZ_MSGS_VER ${gz-msgs9_VERSION_MAJOR})
+
+find_package(gz-plugin2 REQUIRED COMPONENTS register)
+set(GZ_PLUGIN_VER ${gz-plugin2_VERSION_MAJOR})
+
+find_package(gz-utils2 REQUIRED)
+set(GZ_UTILS_VER ${gz-utils2_VERSION_MAJOR})
+
+find_package(gz-common5 REQUIRED COMPONENTS profiler)
+set(GZ_COMMON_VER ${gz-common5_VERSION_MAJOR})
 
 find_package(std_msgs REQUIRED)
 
@@ -51,9 +60,8 @@ add_library(RustySystem SHARED
 
 target_link_libraries(RustySystem PUBLIC
   rust_system
-  ignition-common${IGN_COMMON_VER}::ignition-common${IGN_COMMON_VER}
-  ignition-gazebo${IGN_GAZEBO_VER}::core
-  ignition-math${IGN_MATH_VER})
+  gz-plugin${GZ_PLUGIN_VER}::gz-plugin${GZ_PLUGIN_VER}
+  gz-sim${GZ_SIM_VER}::gz-sim${GZ_SIM_VER})
 
 install(TARGETS RustySystem DESTINATION lib)
 ament_package()
