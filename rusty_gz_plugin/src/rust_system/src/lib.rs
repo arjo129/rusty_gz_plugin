@@ -59,7 +59,6 @@ impl EventListener for CrowdEventListener {
         match unsafe {&GZ_SPAWN_CB}
         {
             Some(res) => {
-                println!("Spawning agent");
                 ((*res).call_back)(agent as u64, position.x, position.y);
             },
             None => {
