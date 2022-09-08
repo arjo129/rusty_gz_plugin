@@ -26,7 +26,7 @@ namespace rusty
   class RustySystem:
     public gz::sim::System,
     public gz::sim::ISystemConfigure,
-    public gz::sim::ISystemPostUpdate
+    public gz::sim::ISystemPreUpdate
   {
     /// \brief Constructor
     public: RustySystem();
@@ -40,8 +40,8 @@ namespace rusty
                            gz::sim::EventManager &_eventMgr) override;
 
     // Documentation inherited
-    public: void PostUpdate(const gz::sim::UpdateInfo &_info,
-                const gz::sim::EntityComponentManager &_ecm) override;
+    public: void PreUpdate(const gz::sim::UpdateInfo &_info,
+              gz::sim::EntityComponentManager &_ecm) override;
   };
 }
 

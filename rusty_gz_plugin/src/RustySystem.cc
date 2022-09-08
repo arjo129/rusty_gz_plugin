@@ -15,11 +15,14 @@
 
 using namespace rusty;
 
+using namespace gz;
+using namespace gz::sim;
+
 std::string world_name;
 
 gz::transport::Node node;
 
-//std::unordered_map<uint64_t, > ;
+std::unordered_map<uint64_t, uint64_t> correspondance;
 
 void createEntityFromStr(const uint64_t id, const std::string& modelStr)
 {
@@ -78,23 +81,34 @@ void RustySystem::Configure(const gz::sim::Entity &_entity,
                             gz::sim::EntityComponentManager &_ecm,
                             gz::sim::EventManager &_eventMgr)
 {
-    create_crowd_agents(0, 0, 10, 10, 1, 0.1, 0.1);
-    debug_config();
-    register_spawn_cb(spawn_agent);
+  register_spawn_cb(spawn_agent);
 }
 
-void RustySystem::PostUpdate(const gz::sim::UpdateInfo &_info,
-                             const gz::sim::EntityComponentManager &_ecm)
+void RustySystem::PreUpdate(const gz::sim::UpdateInfo &_info,
+                            gz::sim::EntityComponentManager &_ecm)
 {
-    static bool launch = false;
-    if (!launch)
+  if (_info.paused)
+  {
+    return;
+  }
+  run(std::chrono::duration<float>(_info.dt).count());
+  _ecm.Each<components::Actor, components::Name>(
+    [&](const Entity &_entity, const components::Actor *,
+    const components::Name *_name)->bool
     {
-        run();
-        launch = true;
-    }
+      if (_name->Data().size() > 5 && _name->Data().substr(0,5) == "actor")
+      {
+        auto position = query_position(atoi(_name->Data().substr(5, _name->Data().size()).c_str()));
+        _ecm.Component<components::Pose>(_entity)->Data() = gz::math::Pose3d(position.x, position.y, 0.5, 0, 0, 0);
+        _ecm.SetChanged(_entity, components::Pose::typeId,
+          ComponentState::OneTimeChange);
+
+      }
+      return true;
+    });
 }
 
 GZ_ADD_PLUGIN(rusty::RustySystem,
               gz::sim::System,
               gz::sim::ISystemConfigure,
-              gz::sim::ISystemPostUpdate)
+              gz::sim::ISystemPreUpdate)
