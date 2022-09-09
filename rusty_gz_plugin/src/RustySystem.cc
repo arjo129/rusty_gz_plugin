@@ -38,15 +38,15 @@ void createEntityFromStr(const uint64_t id, const std::string& modelStr)
   if (executed)
   {
     if (result)
-      igndbg << "Entity was created : [" << res.data() << "]" << std::endl;
+      gzdbg << "Entity was created : [" << res.data() << "]" << std::endl;
     else
     {
-      ignerr << "Service call failed" << std::endl;
+      gzerr << "Service call failed" << std::endl;
       return;
     }
   }
   else
-    ignerr << "Service call timed out" << std::endl;
+    gzerr << "Service call timed out" << std::endl;
 //! [call service create sphere]
 }
 
@@ -99,6 +99,11 @@ void RustySystem::PreUpdate(const gz::sim::UpdateInfo &_info,
       if (_name->Data().size() > 5 && _name->Data().substr(0,5) == "actor")
       {
         auto position = query_position(atoi(_name->Data().substr(5, _name->Data().size()).c_str()));
+        if (position.visible < 0)
+        {
+          _ecm.RequestRemoveEntity(_entity, true);
+          return true;
+        }
         _ecm.Component<components::Pose>(_entity)->Data() = gz::math::Pose3d(position.x, position.y, 0.5, 0, 0, 0);
         _ecm.SetChanged(_entity, components::Pose::typeId,
           ComponentState::OneTimeChange);
