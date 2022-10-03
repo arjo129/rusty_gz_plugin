@@ -76,6 +76,7 @@ RustySystem::RustySystem()
 
 RustySystem::~RustySystem()
 {
+  // TODO(arjo): Add a check if the crowdsim is actually inited
   crowdsim_free(this->crowdsim);
 }
 
@@ -84,9 +85,21 @@ void RustySystem::Configure(const gz::sim::Entity &_entity,
                             gz::sim::EntityComponentManager &_ecm,
                             gz::sim::EventManager &_eventMgr)
 {
+
+  std::string path;
+  if (_sdf->HasElement("path"))
+  {
+    path = _sdf->Get<std::string>("path");
+  }
+  else
+  {
+    gzerr << "Please specify a path using the <path> tag! "
+      <<"As is standard practice this plugin will proceed to crash gazebo\n";
+    return;
+  }
   // Creates a new crowdsim instance
   this->crowdsim = crowdsim_new(
-    "/home/arjo/workspaces/chartsim/src/chart_sim_maps/maps/ward45/ward45.building.yaml",
+    path.c_str(),
     spawn_agent
   );
 
@@ -96,6 +109,7 @@ void RustySystem::Configure(const gz::sim::Entity &_entity,
   Position waypoints[1] = {
     Position{9, -3, 0}
   };
+
   crowdsim_add_source_sink(
     this->crowdsim,
     start,

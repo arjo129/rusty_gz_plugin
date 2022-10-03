@@ -3,6 +3,13 @@
     <plugin
       filename="libRustySystem.so"
       name="rusty::RustySystem">
+      <path>/home/arjo/workspaces/chartsim/src/chart_sim_maps/maps/ward45/ward45.building.yaml</path>
+      <source_sink>
+        <start>-23 -1 0</start>
+        <waypoints>
+          <waypoint>9 -3 0</waypoint>
+        </waypoints>
+      </source_sink>
     </plugin>
 
     <physics name="1ms" type="ode">
