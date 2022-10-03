@@ -19,7 +19,7 @@
 
 #include <memory>
 #include <gz/sim/System.hh>
-
+#include "rust_interface.h"
 namespace rusty
 {
   /// \brief A plugin that validates target identification reports.
@@ -42,6 +42,8 @@ namespace rusty
     // Documentation inherited
     public: void PreUpdate(const gz::sim::UpdateInfo &_info,
               gz::sim::EntityComponentManager &_ecm) override;
+
+    private: simulation_binding_t* crowdsim;
   };
 }
 

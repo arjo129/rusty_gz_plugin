@@ -4,88 +4,29 @@ use rmf_crowdsim::local_planners::no_local_plan::NoLocalPlan;
 use rmf_crowdsim::source_sink::source_sink::{PoissonCrowd, SourceSink};
 use rmf_crowdsim::spatial_index::location_hash_2d::LocationHash2D;
 use rmf_crowdsim::spatial_index::spatial_index::SpatialIndex;
+use rmf_crowdsim::rmf::RMFPlanner;
 use rmf_crowdsim::*;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use std::ffi::{c_int, c_float};
+use std::ffi::{c_int, c_float, c_char, CStr};
+use std::fs;
 
 ////////////////////////////////////////////////////////////////////////////////
-struct StubHighLevelPlan {
-    default_vel: Vec2f,
-}
-
-impl StubHighLevelPlan {
-    fn new(default_vel: Vec2f) -> Self {
-        StubHighLevelPlan {
-            default_vel: default_vel,
-        }
-    }
-}
-
-impl HighLevelPlanner for StubHighLevelPlan {
-    fn get_desired_velocity(
-        &mut self,
-        _agent: &Agent,
-        _time: std::time::Duration,
-    ) -> Option<Vec2f> {
-        Some(self.default_vel)
-    }
-
-    /// Set the target position for a given agent
-    fn set_target(&mut self, _agent: &Agent, _point: Point, _tolerance: Vec2f) {
-        // For now do nothing
-    }
-    /// Remove an agent
-    fn remove_agent_id(&mut self, _agent: AgentId) {
-        // Do nothing
-    }
-}
-////////////////////////////////////////////////////////////////////////////////
-#[derive(Debug)]
-struct CrowdEventListener {
-    correspondence: HashMap<u64, u64>
-}
-
-impl CrowdEventListener {
-    pub fn new() -> Self {
-        Self{
-            correspondence: HashMap::new()
-        }
-    }
-}
-
-impl EventListener for CrowdEventListener {
-    fn agent_spawned(&mut self, position: Vec2f, agent: AgentId) {
-        match unsafe {&GZ_SPAWN_CB}
-        {
-            Some(res) => {
-                ((*res).call_back)(agent as u64, position.x, position.y);
-            },
-            None => {
-                panic!("Please register a spawn callback");
-            }
-        }
-    }
-
-    /// Called each time an agent is destroyed
-    fn agent_destroyed(&mut self, agent: AgentId) {
-        println!("Removed {}", agent);
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-#[derive(Debug, Copy, Clone)]
+/// Globals go here.
+#[derive(Debug, Clone)]
 pub struct CrowdSimConfig{
     source_x: f64,
     source_y: f64,
-    sink_x: f64,
-    sink_y: f64,
+    waypoints: Vec<Vec2f>,
     radius: f64,
     rate: f64,
     lambda: f64
 }
+
+/// List of SourceSink components
 static mut SIM_CONFIG: Vec<CrowdSimConfig> = vec!();
 
+/// Spawn callback
 pub struct SpawnCBIntegration {
     pub call_back: extern fn(u64, f64, f64) -> ()
 }
@@ -98,11 +39,33 @@ struct SimulationModel {
 }
 static mut SIM_MODEL: Option<Arc<Mutex<SimulationModel>>> = None;
 
-#[no_mangle]
-pub extern "C" fn register_spawn_cb(call_back: extern fn(u64, f64, f64) -> ()) {
-    unsafe { GZ_SPAWN_CB = Some(SpawnCBIntegration {
-        call_back: call_back});};
+static mut FILE_PATH: &str = "";
 
+#[repr(C)]
+pub struct Position
+{
+    x: c_float,
+    y: c_float,
+    visible: c_int
+}
+
+#[repr(C)]
+pub struct SimulationBinding
+{
+    crowd_sim: Simulation<LocationHash2D>,
+    rmf_file_path: String,
+    spawn_callback: SpawnCBIntegration,
+    rmf_planner: Arc<Mutex<RMFPlanner>>,
+    local_planner: Arc<Mutex<NoLocalPlan>> //TODO(arjo): Switch to Zanlungo
+}
+
+#[no_mangle]
+pub extern "C" fn crowdsim_new(
+    file_path: *const c_char,
+    spawn_cb: extern fn (u64, f64, f64) -> ()
+) -> *mut SimulationBinding
+{
+    // TODO(arjo): Calculate size based on rmf_planner
     let stub_spatial = spatial_index::location_hash_2d::LocationHash2D::new(
         1000f64,
         1000f64,
@@ -110,9 +73,176 @@ pub extern "C" fn register_spawn_cb(call_back: extern fn(u64, f64, f64) -> ()) {
         Point::new(-500f64, -500f64),
     );
 
-    let velocity = Vec2f::new(1.0, 0.0);
+    let mut crowd_sim = Simulation::new(stub_spatial);
 
-    let high_level_planner = Arc::new(Mutex::new(StubHighLevelPlan::new(velocity)));
+    let c_str: &CStr = unsafe { CStr::from_ptr(file_path) };
+
+    let yaml_body = fs::read_to_string(c_str.to_str().unwrap()).unwrap();
+    let rmf_planner = RMFPlanner::from_yaml(&yaml_body, 3.0, 0.2, 0.3);
+    let high_level_planner = Arc::new(Mutex::new(rmf_planner));
+
+    let event_listener = Arc::new(Mutex::new(
+        CrowdEventListener::new(SpawnCBIntegration {
+            call_back: spawn_cb})));
+    crowd_sim.add_event_listener(event_listener.clone());
+
+    Box::into_raw(Box::new(SimulationBinding
+    {
+        crowd_sim,
+        rmf_file_path: c_str.to_str().unwrap().to_owned(),
+        spawn_callback: SpawnCBIntegration { call_back: spawn_cb },
+        rmf_planner: high_level_planner,
+        local_planner: Arc::new(Mutex::new(NoLocalPlan{}))
+    }))
+}
+
+#[no_mangle]
+pub extern "C" fn crowdsim_free(ptr: *mut SimulationBinding)
+{
+    if ptr.is_null() {
+        return;
+    }
+    unsafe {
+        Box::from_raw(ptr);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn crowdsim_add_source_sink(
+    ptr: *mut SimulationBinding,
+    start: Position,
+    waypoints: *mut Position,
+    num_waypoints: u64,
+    rate: f64)
+{
+    let mut sim_binding = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    let positions = unsafe {
+        std::slice::from_raw_parts(
+            waypoints as *const Position,
+            num_waypoints as usize
+        )
+    };
+
+    let mut waypoints = vec!();
+
+    for position in positions {
+        waypoints.push(Vec2f::new(position.x.into(), position.y.into()));
+        println!("Setting target {:?}, {:?}", position.x, position.y);
+    }
+
+
+    let crowd_generator = Arc::new(PoissonCrowd::new(rate));
+
+    let source_sink = Arc::new(SourceSink {
+        source: Vec2f::new(start.x.into(), start.y.into()),
+        waypoints: waypoints,
+        radius_sink: 1f64,
+        crowd_generator: crowd_generator,
+        high_level_planner: sim_binding.rmf_planner.clone(),
+        local_planner: sim_binding.local_planner.clone(),
+        agent_eyesight_range: 5f64,
+        loop_forever: false
+    });
+
+    sim_binding.crowd_sim.add_source_sink(source_sink);
+}
+
+
+#[no_mangle]
+pub extern "C" fn crowdsim_query_position(
+    ptr: *mut SimulationBinding,
+    agent_id: u64) -> Position
+{
+    let mut sim_binding = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+
+    //println!("Looking up agent {:?}", agent_id);
+
+    let agent = sim_binding.crowd_sim.agents.get(&(agent_id as usize));
+    if let Some(agent) = agent {
+        return Position{
+            x: agent.position.x as f32,
+            y: agent.position.y as f32,
+            visible: 1
+        };
+    }
+    println!("Agent not found {:?}", agent_id);
+    return Position{x: 0.0, y: 0.0, visible: -1};
+}
+
+
+#[no_mangle]
+pub extern "C" fn crowdsim_run(
+    ptr: *mut SimulationBinding,
+    dt: f32)
+{
+    let mut sim_binding = unsafe {
+        assert!(!ptr.is_null());
+        &mut *ptr
+    };
+    if dt <= 0.0 {
+        println!("Got negative dt");
+        return;
+    }
+    let step_size = std::time::Duration::new(
+        dt.floor() as u64, ((dt - dt.floor())*1e9) as u32);
+    sim_binding.crowd_sim.step(step_size);
+}
+////////////////////////////////////////////////////////////////////////////////
+struct CrowdEventListener {
+    correspondence: HashMap<u64, u64>,
+    spawn_callback: SpawnCBIntegration
+}
+
+impl CrowdEventListener {
+    pub fn new(spawn_callback: SpawnCBIntegration) -> Self {
+        Self{
+            correspondence: HashMap::new(),
+            spawn_callback
+        }
+    }
+}
+
+impl EventListener for CrowdEventListener {
+    fn agent_spawned(&mut self, position: Vec2f, agent: AgentId) {
+        println!("Spawning Agent");
+        (self.spawn_callback.call_back)(agent as u64, position.x, position.y);
+    }
+
+    /// Called each time an agent is destroyed
+    fn agent_destroyed(&mut self, agent: AgentId) {
+        println!("Removed {}", agent);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+/*
+#[no_mangle]
+pub extern "C" fn crowdsim_register_spawn_cb(
+    call_back: extern fn(u64, f64, f64) -> ()) {
+    unsafe { GZ_SPAWN_CB = Some(SpawnCBIntegration {
+        call_back: call_back});};
+
+    // TODO(arjo): Calaulate size based on rmf_planner
+    let stub_spatial = spatial_index::location_hash_2d::LocationHash2D::new(
+        1000f64,
+        1000f64,
+        20f64,
+        Point::new(-500f64, -500f64),
+    );
+
+    // TODO(arjo): properly handle errors
+    let file_str = unsafe {fs::read_to_string(FILE_PATH)};
+    let rmf_planner = RMFPlanner::from_yaml(&file_str.unwrap(), 3.0, 0.2, 0.3);
+
+    let high_level_planner = Arc::new(Mutex::new(rmf_planner));
     let local_planner = Arc::new(Mutex::new(NoLocalPlan {}));
 
     let mut crowd_simulation = Simulation::new(stub_spatial);
@@ -120,17 +250,19 @@ pub extern "C" fn register_spawn_cb(call_back: extern fn(u64, f64, f64) -> ()) {
     let crowd_generator = Arc::new(PoissonCrowd::new(1f64));
 
     let source_sink = Arc::new(SourceSink {
-        source: Vec2f::new(0f64, 0f64),
-        sink: Vec2f::new(20f64, 0f64),
+        source: Vec2f::new(-23f64, -1f64),
+        waypoints: vec!(Vec2f::new(9f64, -3f64)),
         radius_sink: 1f64,
         crowd_generator: crowd_generator,
         high_level_planner: high_level_planner,
         local_planner: local_planner,
         agent_eyesight_range: 5f64,
+        loop_forever: false
     });
 
-    let event_listener = Arc::new(Mutex::new(CrowdEventListener::new()));
-
+    let event_listener = Arc::new(Mutex::new(
+        CrowdEventListener::new(SpawnCBIntegration {
+            call_back: call_back})));
     crowd_simulation.add_event_listener(event_listener.clone());
     crowd_simulation.add_source_sink(source_sink);
     let model = Arc::new(Mutex::new(SimulationModel {
@@ -143,44 +275,23 @@ pub extern "C" fn register_spawn_cb(call_back: extern fn(u64, f64, f64) -> ()) {
 }
 
 #[no_mangle]
-pub extern "C" fn create_crowd_agents(
-    source_x: f64,
-    source_y: f64,
-    sink_x: f64,
-    sink_y: f64,
-    radius: f64,
-    rate: f64,
-    lambda: f64) {
-
-    let cfg = CrowdSimConfig{
-        source_x: source_x,
-        source_y: source_y,
-        sink_x: sink_x,
-        sink_y: sink_y,
-        radius: radius,
-        rate: rate,
-        lambda: lambda
-    };
-
-    unsafe { SIM_CONFIG.push(cfg); }
-}
-
-#[no_mangle]
-pub extern "C" fn debug_config()
+pub extern "C" fn crowdsim_set_file(
+    file_path: *const c_char
+)
 {
-    for x in unsafe{ &SIM_CONFIG } {
-       println!("{:?}", x);
-    }
+    let c_str: &CStr = unsafe { CStr::from_ptr(file_path) };
+    unsafe {FILE_PATH = c_str.to_str().unwrap()};
 }
 
+
 #[no_mangle]
-pub extern "C" fn run(dt: f32)
+pub extern "C" fn crowdsim_run(sim: SimulationBinding, dt: f32)
 {
     if dt <= 0.0 {
         return;
     }
-    let step_size = std::time::Duration::new(dt.floor() as u64, ((dt - dt.floor())*1e9) as u32);
-    // TODO(arjo): Configure step time.
+    let step_size = std::time::Duration::new(
+        dt.floor() as u64, ((dt - dt.floor())*1e9) as u32);
     match unsafe{&SIM_MODEL} {
     Some(sim) => {
         sim.lock().unwrap().crowd_sim.step(step_size);
@@ -191,16 +302,10 @@ pub extern "C" fn run(dt: f32)
     }
 }
 
-#[repr(C)]
-pub struct Position
-{
-    x: c_float,
-    y: c_float,
-    visible: c_int
-}
+
 
 #[no_mangle]
-pub extern "C" fn query_position(agent_id: u64) -> Position {
+pub extern "C" fn crowdsim_query_position(agent_id: u64) -> Position {
     match unsafe{&SIM_MODEL} {
         Some(sim) => {
             //TODO(arjo): Remove clone
@@ -217,8 +322,7 @@ pub extern "C" fn query_position(agent_id: u64) -> Position {
             return Position{x: 0.0, y: 0.0, visible: -1};
         }
         None => {
-            println!("Error: Sim model was not initialized");
             return Position{x: 0.0, y: 0.0, visible: -1};
         }
     }
-}
+}*/

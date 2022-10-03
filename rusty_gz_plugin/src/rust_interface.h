@@ -3,14 +3,7 @@
 
 #include <cstdint>
 
-extern "C" void create_crowd_agents(
-    double, double, double, double, double, double, double);
-
-extern "C" void debug_config();
-
-typedef void (*spawn_cb_t) (uint64_t id, double x, double y);
-
-extern "C" void register_spawn_cb(spawn_cb_t cb);
+extern "C" typedef struct SimulationBinding simulation_binding_t;
 
 extern "C"{
 struct Position
@@ -21,6 +14,24 @@ struct Position
 };
 }
 
-extern "C" Position query_position(uint64_t id);
+typedef void (*spawn_cb_t) (uint64_t id, double x, double y);
 
-extern "C" void run(float timestep);
+extern "C" simulation_binding_t * crowdsim_new(
+    char* file_path, spawn_cb_t cb);
+
+extern "C" void crowdsim_free(simulation_binding_t *);
+
+extern "C" void crowdsim_add_source_sink(
+    simulation_binding_t *crowdsim_instance,
+    Position start,
+    Position* waypoints,
+    uint64_t num_waypoints,
+    double rate
+    );
+
+extern "C" Position crowdsim_query_position(
+    simulation_binding_t*, uint64_t id);
+
+extern "C" void crowdsim_run(
+    simulation_binding_t*,
+    float timestep);

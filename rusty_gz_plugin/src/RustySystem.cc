@@ -13,12 +13,14 @@
 
 #include <gz/transport/Node.hh>
 
+#include <gz/common/StringUtils.hh>
+
 using namespace rusty;
 
 using namespace gz;
 using namespace gz::sim;
 
-std::string world_name;
+std::string worldName;
 
 gz::transport::Node node;
 
@@ -33,8 +35,8 @@ void createEntityFromStr(const uint64_t id, const std::string& modelStr)
   req.set_sdf(modelStr);
   req.set_name("actor"+std::to_string(id));
 
-  bool executed = node.Request("/world/crowd_world/create",
-            req, 1000, res, result);
+  bool executed = node.Request("/world/"+ worldName +"/create",
+            req, 10000, res, result);
   if (executed)
   {
     if (result)
@@ -61,7 +63,7 @@ extern "C" void spawn_agent(uint64_t id, double x, double y)
             https://fuel.gazebosim.org/1.0/OpenRobotics/models/Male visitor/1
             </uri>
             <pose>)" + std::to_string(x) + " " + std::to_string(y) + " " +
-            R"(0.5 0 0 0</pose>
+            R"(1.7 0 0 0</pose>
         </include>
     </sdf>)";
     createEntityFromStr(id, sphereStr);
@@ -74,6 +76,7 @@ RustySystem::RustySystem()
 
 RustySystem::~RustySystem()
 {
+  crowdsim_free(this->crowdsim);
 }
 
 void RustySystem::Configure(const gz::sim::Entity &_entity,
@@ -81,7 +84,28 @@ void RustySystem::Configure(const gz::sim::Entity &_entity,
                             gz::sim::EntityComponentManager &_ecm,
                             gz::sim::EventManager &_eventMgr)
 {
-  register_spawn_cb(spawn_agent);
+  // Creates a new crowdsim instance
+  this->crowdsim = crowdsim_new(
+    "/home/arjo/workspaces/chartsim/src/chart_sim_maps/maps/ward45/ward45.building.yaml",
+    spawn_agent
+  );
+
+  // Source sinks:
+  // We have hardcoded it for this demo, but should be trivial to parse SDF.
+  Position start {-23, -1, 0};
+  Position waypoints[1] = {
+    Position{9, -3, 0}
+  };
+  crowdsim_add_source_sink(
+    this->crowdsim,
+    start,
+    waypoints,
+    1,
+    1
+  );
+
+  //crowdsim_register_spawn_cb(spawn_agent);
+  worldName = _ecm.Component<components::Name>(_entity)->Data();
 }
 
 void RustySystem::PreUpdate(const gz::sim::UpdateInfo &_info,
@@ -91,14 +115,17 @@ void RustySystem::PreUpdate(const gz::sim::UpdateInfo &_info,
   {
     return;
   }
-  run(std::chrono::duration<float>(_info.dt).count());
+  crowdsim_run(
+    this->crowdsim, std::chrono::duration<float>(_info.dt).count());
   _ecm.Each<components::Actor, components::Name>(
     [&](const Entity &_entity, const components::Actor *,
     const components::Name *_name)->bool
     {
       if (_name->Data().size() > 5 && _name->Data().substr(0,5) == "actor")
       {
-        auto position = query_position(atoi(_name->Data().substr(5, _name->Data().size()).c_str()));
+        auto position = crowdsim_query_position(
+          this->crowdsim,
+          atoi(_name->Data().substr(5, _name->Data().size()).c_str()));
         if (position.visible < 0)
         {
           _ecm.RequestRemoveEntity(_entity, true);
