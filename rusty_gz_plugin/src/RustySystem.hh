@@ -18,15 +18,15 @@
 #define RUSTY_GZ_SYSTEM_HH_
 
 #include <memory>
-#include <ignition/gazebo/System.hh>
-
+#include <gz/sim/System.hh>
+#include "rust_interface.h"
 namespace rusty
 {
   /// \brief A plugin that validates target identification reports.
   class RustySystem:
-    public ignition::gazebo::System,
-    public ignition::gazebo::ISystemConfigure,
-    public ignition::gazebo::ISystemPostUpdate
+    public gz::sim::System,
+    public gz::sim::ISystemConfigure,
+    public gz::sim::ISystemPreUpdate
   {
     /// \brief Constructor
     public: RustySystem();
@@ -34,14 +34,16 @@ namespace rusty
     public: ~RustySystem();
 
     // Documentation inherited
-    public: void Configure(const ignition::gazebo::Entity &_entity,
+    public: void Configure(const gz::sim::Entity &_entity,
                            const std::shared_ptr<const sdf::Element> &_sdf,
-                           ignition::gazebo::EntityComponentManager &_ecm,
-                           ignition::gazebo::EventManager &_eventMgr) override;
+                           gz::sim::EntityComponentManager &_ecm,
+                           gz::sim::EventManager &_eventMgr) override;
 
     // Documentation inherited
-    public: void PostUpdate(const ignition::gazebo::UpdateInfo &_info,
-                const ignition::gazebo::EntityComponentManager &_ecm) override;
+    public: void PreUpdate(const gz::sim::UpdateInfo &_info,
+              gz::sim::EntityComponentManager &_ecm) override;
+
+    private: simulation_binding_t* crowdsim;
   };
 }
 

@@ -1,8 +1,32 @@
 <sdf version="1.6">
-  <world name="waterworld">
+  <world name="crowd_world">
     <plugin
       filename="libRustySystem.so"
       name="rusty::RustySystem">
+      <path>/home/arjo/workspaces/chartsim/src/chart_sim_maps/maps/ward45/ward45.building.yaml</path>
+      <source_sink>
+        <start>-23 -1 0</start>
+        <waypoints>
+          <waypoint>9 -3 0</waypoint>
+        </waypoints>
+      </source_sink>
+    </plugin>
+
+    <physics name="1ms" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <plugin
+      filename="ignition-gazebo-physics-system"
+      name="ignition::gazebo::systems::Physics">
+    </plugin>
+    <plugin
+      filename="ignition-gazebo-user-commands-system"
+      name="ignition::gazebo::systems::UserCommands">
+    </plugin>
+    <plugin
+      filename="ignition-gazebo-scene-broadcaster-system"
+      name="ignition::gazebo::systems::SceneBroadcaster">
     </plugin>
   </world>
 </sdf>
