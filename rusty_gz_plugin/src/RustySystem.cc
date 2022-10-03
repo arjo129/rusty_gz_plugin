@@ -103,22 +103,53 @@ void RustySystem::Configure(const gz::sim::Entity &_entity,
     spawn_agent
   );
 
-  // Source sinks:
-  // We have hardcoded it for this demo, but should be trivial to parse SDF.
-  Position start {-23, -1, 0};
-  Position waypoints[1] = {
-    Position{9, -3, 0}
-  };
+  if (_sdf->HasElement("sources"))
+  {
+    auto sources = _sdf->FindElement("sources");
+    auto sourceDescription = sources->GetFirstElement();
+    if (sourceDescription == nullptr)
+    {
+      gzerr << "Unable to get element description" << std::endl;
+      return;
+    }
+    while (sourceDescription != nullptr)
+    {
+      if (sourceDescription->GetName() == "source_sink")
+      {
+        auto start_pos = sourceDescription->Get<math::Vector3d>("start");
+        Position start {start_pos.X(), start_pos.Y(), 0};
+        std::vector<Position> waypoints;
+        if (!sourceDescription->HasElement("waypoints"))
+        {
+          gzerr << "Please specify waypoints for every source\n";
+          return;
+        }
+        auto rate = sourceDescription->Get<double>("rate"); 
+        auto waypointSdf = sourceDescription->FindElement("waypoints");
+        auto waypointDesc = waypointSdf->GetFirstElement();
+        while (waypointDesc != nullptr)
+        {
+          auto waypoint_pos = waypointDesc->Get<math::Vector3d>();
+          waypoints.push_back(Position{waypoint_pos.X(), waypoint_pos.Y(), waypoint_pos.Z()});
+          waypointDesc = waypointDesc->GetNextElement();
+        }
+        crowdsim_add_source_sink(
+          this->crowdsim,
+          start,
+          waypoints.data(),
+          waypoints.size(),
+          rate
+        );
 
-  crowdsim_add_source_sink(
-    this->crowdsim,
-    start,
-    waypoints,
-    1,
-    1
-  );
-
-  //crowdsim_register_spawn_cb(spawn_agent);
+      }
+      else
+      {
+        gzerr << "Unrecognized element " << sourceDescription->GetName() << "\n";
+      }
+      sourceDescription = sourceDescription->GetNextElement();
+    }
+  }
+  
   worldName = _ecm.Component<components::Name>(_entity)->Data();
 }
 

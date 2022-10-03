@@ -162,8 +162,6 @@ pub extern "C" fn crowdsim_query_position(
         &mut *ptr
     };
 
-    //println!("Looking up agent {:?}", agent_id);
-
     let agent = sim_binding.crowd_sim.agents.get(&(agent_id as usize));
     if let Some(agent) = agent {
         return Position{
@@ -172,7 +170,6 @@ pub extern "C" fn crowdsim_query_position(
             visible: 1
         };
     }
-    println!("Agent not found {:?}", agent_id);
     return Position{x: 0.0, y: 0.0, visible: -1};
 }
 

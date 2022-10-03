@@ -66,6 +66,9 @@ extern "C" void crowdsim_add_source_sink(
 /// \brief Query position at current simulation time step.
 /// \param[in] t - Simulation instance
 /// \param[in] id - The agent in question's id
+/// \returns The agent position. If the agent cannot be found (likely due to
+/// removal), then set the visiblity field to -1 else vibility field will be
+/// 1.
 extern "C" Position crowdsim_query_position(
     simulation_binding_t* t, uint64_t id);
 
