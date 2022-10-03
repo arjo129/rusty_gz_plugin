@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rmf_crowdsim = { path = '/home/arjo/workspaces/rust/rmf_crowdsim/rmf_crowdsim/' }
+rmf_crowdsim = { git = "https://github.com/open-rmf/rmf_crowdsim.git", branch = "arjo/feat/zanlungo_local_strategy" }
 
 [lib]
 crate-type=["staticlib"]

@@ -1030,6 +1030,7 @@ dependencies = [
 [[package]]
 name = "rmf_crowdsim"
 version = "0.1.0"
+source = "git+https://github.com/open-rmf/rmf_crowdsim.git?branch=arjo/feat/zanlungo_local_strategy#cc56b2157cee509ee94297fa42f582264ebfadad"
 dependencies = [
  "image",
  "imageproc",

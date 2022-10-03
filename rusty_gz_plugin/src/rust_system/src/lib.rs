@@ -211,7 +211,6 @@ impl CrowdEventListener {
 
 impl EventListener for CrowdEventListener {
     fn agent_spawned(&mut self, position: Vec2f, agent: AgentId) {
-        println!("Spawning Agent");
         (self.spawn_callback.call_back)(agent as u64, position.x, position.y);
     }
 
